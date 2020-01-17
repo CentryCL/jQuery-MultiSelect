@@ -65,6 +65,16 @@
         checkboxAutoFit    : false,  // auto calc checkbox padding
         optionAttributes   : [],    // attributes to copy to the checkbox from the option element
 
+        // Enable lazy loading of options.
+        // This option keep on select only selected
+        // elements. Load into view limited number of elements,
+        // manage options using javascript
+        lazyLoading: false,
+        lazyMaxLoadingOptions: 20,
+        stepOnScrollChange: 4,
+        //provide options from array
+        arrayOptions: [],
+
         // Callbacks
         onLoad        : function( element ){},           // fires at end of list initialization
         onOptionClick : function( element, option ){},   // fires when an option is clicked
@@ -313,11 +323,35 @@
                         // search non optgroup li's
                         var searchString = $.trim( search.val().toLowerCase() );
                         if( searchString ) {
-                            optionsList.find('li[data-search-term*="'+ searchString +'"]:not(.optgroup)').removeClass('ms-hidden');
-                            optionsList.find('li:not([data-search-term*="'+ searchString +'"], .optgroup)').addClass('ms-hidden');
+                            if(instance.options.lazyLoading){
+                                if( instance.optionsToRestore == undefined || instance.optionsToRestore.length === 0){
+                                    instance.optionsToRestore = instance.allOptions;
+                                }
+                                instance.loadOptions(instance.optionsToRestore.filter(function(val){
+                                    var cond = false;
+                                    if(instance.options.searchOptions.searchText){
+                                        cond = val.name.toLowerCase().indexOf(searchString) >= 0
+                                    }
+                                    if(instance.options.searchOptions.searchValue){
+                                        cond = cond || val.value.toLowerCase().indexOf(searchString) >= 0
+                                    }
+                                    return cond;
+                                }),
+                                true,
+                                false);
+                            }else{
+                                optionsList.find('li[data-search-term*="'+ searchString +'"]:not(.optgroup)').removeClass('ms-hidden');
+                                optionsList.find('li:not([data-search-term*="'+ searchString +'"], .optgroup)').addClass('ms-hidden');
+                            }
                         }
                         else {
-                            optionsList.find('.ms-hidden').removeClass('ms-hidden');
+                            if(instance.options.lazyLoading){
+                                instance.allOptions = instance.optionsToRestore;
+                                instance.optionsToRestore = [];
+                                instance.loadOptions(instance.allOptions, true, false);
+                            }else{
+                                optionsList.find('.ms-hidden').removeClass('ms-hidden');
+                            }
                         }
 
                         // show/hide optgroups based on if there are items visible within
@@ -352,16 +386,32 @@
                 var select = optionsWrap.parent().siblings('.ms-list-'+ instance.listNumber +'.jqmsLoaded');
 
                 if( $(this).hasClass('global') ) {
-                    // check if any options are not selected if so then select them
-                    if( optionsList.find('li:not(.optgroup, .selected, .ms-hidden)').length ) {
-                        // get unselected vals, mark as selected, return val list
-                        optionsList.find('li:not(.optgroup, .selected, .ms-hidden)').addClass('selected');
-                        optionsList.find('li.selected input[type="checkbox"]:not(:disabled)').prop( 'checked', true );
-                    }
-                    // deselect everything
-                    else {
-                        optionsList.find('li:not(.optgroup, .ms-hidden).selected').removeClass('selected');
-                        optionsList.find('li:not(.optgroup, .ms-hidden, .selected) input[type="checkbox"]:not(:disabled)').prop( 'checked', false );
+                    var lazyUnselected = [];
+                    if(instance.options.lazyLoading){
+                        lazyUnselected = instance.allOptions.filter(function(val){return !val.checked;});
+                        var checked = lazyUnselected.length > 0;
+                        for(var key in instance.allOptions){
+                            instance.allOptions[key].checked = checked;
+                        }
+                        if(instance.optionsToRestore){
+                            var preloaded_options = instance.allOptions;
+                            instance.loadOptions(instance.optionsToRestore, true, true);
+                            instance.loadOptions(preloaded_options, true, false);
+                        }else{
+                            instance.loadOptions(instance.allOptions, true, true);
+                        }
+                    }else{
+                        // check if any options are not selected if so then select them
+                        if( optionsList.find('li:not(.optgroup, .selected, .ms-hidden)').length) {
+                            // get unselected vals, mark as selected, return val list
+                            optionsList.find('li:not(.optgroup, .selected, .ms-hidden)').addClass('selected');
+                            optionsList.find('li.selected input[type="checkbox"]:not(:disabled)').prop( 'checked', true );
+                        }
+                        // deselect everything
+                        else {
+                            optionsList.find('li:not(.optgroup, .ms-hidden).selected').removeClass('selected');
+                            optionsList.find('li:not(.optgroup, .ms-hidden, .selected) input[type="checkbox"]:not(:disabled)').prop( 'checked', false );
+                        }
                     }
                 }
                 else if( $(this).closest('li').hasClass('optgroup') ) {
@@ -397,13 +447,62 @@
                 instance._updatePlaceholderText();
             });
 
+            // Add event to scroll if lazyLoading
+            if(instance.options.lazyLoading){
+                optionsWrap.on('scroll', function(){
+                    var scroll_margin_bottom = $($(this).find('ul > li')).height()*2;
+                    var scroll_margin_top = scroll_margin_bottom;
+                    if($(this).find('.ms-search').lenght > 0){
+                        scroll_margin_top += $($(this).find('.ms-search')[0]).height();
+                    }
+                    if($(this).find('.ms-selectall').lenght > 0){
+                        scroll_margin_top += $($(this).find('.ms-selectall')[0]).height();
+                    }
+                    var max_scroll_allowed = optionsList.height()-$(this).height()-scroll_margin_bottom;
+                    var currentMaxLoaded = instance.currentMinIndexLoaded + instance.options.lazyMaxLoadingOptions;
+                    if($(this).scrollTop() >= max_scroll_allowed && 
+                        instance.allOptions.length > currentMaxLoaded){
+                        instance._loadBotomOptions($(this));
+                    }else if($(this).scrollTop() <= scroll_margin_top &&
+                        instance.currentMinIndexLoaded > 0){
+                        instance._loadTopOptions($(this));
+                    }
+                });
+            }
+
             // add options to wrapper
             var options = [];
-            $(instance.element).children().each(function(){
-                if( this.nodeName == 'OPTGROUP' ) {
-                    var groupOptions = [];
+            if(instance.options.arrayOptions.length > 0){
+                options = instance.options.arrayOptions;
+            }else{
+                $(instance.element).children().each(function(){
+                    if( this.nodeName == 'OPTGROUP' ) {
+                        var groupOptions = [];
 
-                    $(this).children('option').each(function(){
+                        $(this).children('option').each(function(){
+                            var thisOptionAtts = {};
+                            for( var i = 0; i < instance.options.optionAttributes.length; i++ ) {
+                                var thisOptAttr = instance.options.optionAttributes[ i ];
+
+                                if( $(this).attr( thisOptAttr ) !== undefined ) {
+                                    thisOptionAtts[ thisOptAttr ] = $(this).attr( thisOptAttr );
+                                }
+                            }
+
+                            groupOptions.push({
+                                name   : $(this).text(),
+                                value  : $(this).val(),
+                                checked: $(this).prop( 'selected' ),
+                                attributes: thisOptionAtts
+                            });
+                        });
+
+                        options.push({
+                            label  : $(this).attr('label'),
+                            options: groupOptions
+                        });
+                    }
+                    else if( this.nodeName == 'OPTION' ) {
                         var thisOptionAtts = {};
                         for( var i = 0; i < instance.options.optionAttributes.length; i++ ) {
                             var thisOptAttr = instance.options.optionAttributes[ i ];
@@ -413,61 +512,28 @@
                             }
                         }
 
-                        groupOptions.push({
-                            name   : $(this).text(),
-                            value  : $(this).val(),
-                            checked: $(this).prop( 'selected' ),
+                        options.push({
+                            name      : $(this).text(),
+                            value     : $(this).val(),
+                            checked   : $(this).prop( 'selected' ),
                             attributes: thisOptionAtts
                         });
-                    });
-
-                    options.push({
-                        label  : $(this).attr('label'),
-                        options: groupOptions
-                    });
-                }
-                else if( this.nodeName == 'OPTION' ) {
-                    var thisOptionAtts = {};
-                    for( var i = 0; i < instance.options.optionAttributes.length; i++ ) {
-                        var thisOptAttr = instance.options.optionAttributes[ i ];
-
-                        if( $(this).attr( thisOptAttr ) !== undefined ) {
-                            thisOptionAtts[ thisOptAttr ] = $(this).attr( thisOptAttr );
-                        }
                     }
-
-                    options.push({
-                        name      : $(this).text(),
-                        value     : $(this).val(),
-                        checked   : $(this).prop( 'selected' ),
-                        attributes: thisOptionAtts
-                    });
-                }
-                else {
-                    // bad option
-                    return true;
-                }
-            });
-            instance.loadOptions( options, true, false );
+                    else {
+                        // bad option
+                        return true;
+                    }
+                });
+            }
+            instance.loadOptions( options, true, true );
 
             // BIND SELECT ACTION
             optionsWrap.on( 'click', 'input[type="checkbox"]', function(){
-                $(this).closest( 'li' ).toggleClass( 'selected' );
+
+                 $(this).closest( 'li' ).toggleClass( 'selected' );
 
                 var select = optionsWrap.parent().siblings('.ms-list-'+ instance.listNumber +'.jqmsLoaded');
-
-                // toggle clicked option
-                select.find('option[value="'+ instance._escapeSelector( $(this).val() ) +'"]').prop(
-                    'selected', $(this).is(':checked')
-                ).closest('select').trigger('change');
-
-                // USER CALLBACK
-                if( typeof instance.options.onOptionClick == 'function' ) {
-                    instance.options.onOptionClick(instance.element, this);
-                }
-
-                instance._updateSelectAllText();
-                instance._updatePlaceholderText();
+                instance._updateSelected($(this).val(),$(this).is(':checked'),select, this);
             });
 
             // BIND FOCUS EVENT
@@ -486,8 +552,77 @@
             $(instance.element).hide();
         },
 
+        _updateSelected: function(value, checked, select, checkbox){
+            var instance = this;
+            // toggle clicked option
+            if(instance.options.lazyLoading){
+                var option = instance.allOptions.splice(instance.allOptions.indexOf(instance.allOptionsValueIndex[value]),1)[0];
+                option.checked = checked;
+                if(checked){
+                    var selOption = $('<option value="'+ value +'" selected >'+ value +'</option>');
+                    select.append( selOption );
+                    //put at the beginning
+                    instance.allOptions.unshift(option);
+                }else{
+                    var last_selected_index = 0;
+                    for(var key in instance.allOptions){
+                        if(instance.allOptions[key].checked){
+                            last_selected_index+=1;
+                        }else{
+                            break;
+                        }
+                    }
+                    instance.allOptions.splice(last_selected_index, 0, instance.allOptionsValueIndex[value]);
+                    $(select).find('[value="'+  value  +'"]').remove();
+                }
+            }else{                
+                // toggle clicked option
+                select.find('option[value="'+ instance._escapeSelector( value ) +'"]').prop(
+                    'selected', checked
+                ).closest('select').trigger('change');
+            }
+
+            // USER CALLBACK
+            if( typeof instance.options.onOptionClick == 'function' ) {
+                instance.options.onOptionClick(instance.element, this);
+            }
+
+            instance._updateSelectAllText();
+            instance._updatePlaceholderText();
+        },
+
+        loadOptions: function( options, overwrite, updateSelect ){
+            var instance = this;
+            if(instance.options.lazyLoading){
+                instance.currentMinIndexLoaded = 0;
+                instance.allOptions = options;
+                instance._generateAllOptionsIndex();
+                instance.updateView( instance.allOptions, overwrite, updateSelect );
+            }else{
+                instance.updateView( options, overwrite, updateSelect );
+            }
+        },
+
+        // Generate index for fast search
+        _generateAllOptionsIndex: function(){
+            var instance = this;
+            instance.allOptionsValueIndex = {};
+            var checked = [];
+            for(var key in instance.allOptions){
+                var current_option = instance.allOptions[key];
+                instance.allOptionsValueIndex[current_option.value] = current_option;
+                if(current_option.checked){
+                    checked.push(current_option);
+                }
+            }
+            for(var key in checked){
+                instance.allOptions.splice(instance.allOptions.indexOf(checked[key]),1);
+            }
+            instance.allOptions = checked.concat(instance.allOptions);
+        },
+
         /* LOAD SELECT OPTIONS */
-        loadOptions: function( options, overwrite, updateSelect ) {
+        updateView: function( options, overwrite, updateSelect ) {
             overwrite    = (typeof overwrite == 'boolean') ? overwrite : true;
             updateSelect = (typeof updateSelect == 'boolean') ? updateSelect : true;
 
@@ -502,6 +637,18 @@
                 if( updateSelect ) {
                     select.find('> *').remove();
                 }
+            }
+
+            if(instance.options.lazyLoading){
+                if(updateSelect){
+                    for(var key in options){
+                        if(options[key].checked){
+                            var selOption = $('<option value="'+ options[key].value +'" selected>'+ options[key].name +'</option>');
+                            select.append(selOption);
+                        }
+                    }
+                }
+                options = options.slice(instance.currentMinIndexLoaded,instance.options.lazyMaxLoadingOptions + instance.currentMinIndexLoaded);
             }
 
             var containers = [];
@@ -524,7 +671,7 @@
                     // add option to ms dropdown
                     instance._addOption( container, thisOption );
 
-                    if( updateSelect ) {
+                    if( updateSelect && !instance.options.lazyLoading ){
                         var selOption = $('<option value="'+ thisOption.value +'">'+ thisOption.name +'</option>');
 
                         // add custom user attributes
@@ -552,7 +699,7 @@
                     });
 
                     // prepare to append optgroup to select element
-                    if( updateSelect ) {
+                    if( updateSelect && !instance.options.lazyLoading) {
                         if( select.find('optgroup[label="'+ thisOption.label +'"]').length ) {
                             optGroup = select.find('optgroup[label="'+ thisOption.label +'"]');
                         }
@@ -600,7 +747,7 @@
                         container.find('> ul').append( gContainer );
 
                         // add option to optgroup in select element
-                        if( updateSelect ) {
+                        if( updateSelect && !instance.lazyLoading) {
                             var selOption = $('<option value="'+ thisGOption.value +'">'+ thisGOption.name +'</option>');
 
                             // add custom user attributes
@@ -772,7 +919,12 @@
 
             // update un/select all text
             optionsWrap.find('.ms-selectall').each(function(){
-                var unselected = $(this).parent().find('li:not(.optgroup,.selected,.ms-hidden)');
+                var unselected = [];
+                if(instance.options.lazyLoading){
+                    unselected = instance.allOptions.filter(function(v){return !v.checked;});
+                }else{
+                    unselected = $(this).parent().find('li:not(.optgroup,.selected,.ms-hidden)');
+                }
 
                 $(this).text(
                     unselected.length ? instance.options.texts.selectAll : instance.options.texts.unselectAll
@@ -897,6 +1049,26 @@
             else {
                 return string.replace(/[!"#$%&'()*+,.\/:;<=>?@[\\\]^`{|}~]/g, "\\$&");
             }
+        },
+
+        // Functions for lazy loading
+        _loadBotomOptions: function(element){
+            var instance = this;
+            instance._lazyLoadOptions(element, Math.min(instance.allOptions.length - instance.options.lazyMaxLoadingOptions, instance.currentMinIndexLoaded + instance.options.stepOnScrollChange*instance.options.columns));
+        },
+
+        _loadTopOptions: function(element){
+            var instance = this;
+            instance._lazyLoadOptions(element, Math.max(0, instance.currentMinIndexLoaded - instance.options.stepOnScrollChange));
+        },
+
+        _lazyLoadOptions: function(element, new_min){
+            var instance = this;
+            var items_moved = (new_min-instance.currentMinIndexLoaded)/instance.options.columns;
+            var scroll_unit_size = $(element.find('ul > li')[0]).height();
+            instance.currentMinIndexLoaded = new_min;
+            instance.updateView(instance.allOptions, true, false);
+            element.scrollTop(element.scrollTop()-scroll_unit_size*items_moved);
         }
     };
 

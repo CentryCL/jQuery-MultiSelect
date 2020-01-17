@@ -6,9 +6,10 @@
     <script src="https://code.jquery.com/jquery-1.12.4.js"></script>
     <script src="https://code.jquery.com/ui/1.12.1/jquery-ui.js"></script>
     <script src="./jquery.multiselect.js"></script>
+    <script type="text/javascript" src="example_data_2.js"></script>
 </head>
 <body>
-    <select name="basic[]" multiple="multiple" class="3col active">
+    <select name="basic[]" multiple="multiple" class="2col active">
         <option value="AL">Alabama</option>
         <option value="AK">Alaska</option>
         <option value="AZ">Arizona</option>
@@ -63,14 +64,15 @@
 
     <script>
     $(function () {
-        $('select[multiple].active.3col').multiselect({
-            columns: 3,
+        $('select[multiple].active.2col').multiselect({
             placeholder: 'Select States',
             search: true,
             searchOptions: {
                 'default': 'Search States'
             },
-            selectAll: true
+            lazyLoading: true,
+            selectAll: true,
+            arrayOptions: example_data_2
         });
 
     });
