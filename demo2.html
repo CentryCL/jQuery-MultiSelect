@@ -6,24 +6,24 @@
     <script src="https://code.jquery.com/jquery-1.12.4.js"></script>
     <script src="https://code.jquery.com/ui/1.12.1/jquery-ui.js"></script>
     <script src="./jquery.multiselect.js"></script>
-    <script type="text/javascript" src="example_data.js"></script>
+    <script type="text/javascript" src="example_data_2.js"></script>
 </head>
 <body>
-    <select name="basic[]" multiple="multiple" class="7col active">
+    <select name="basic[]" multiple="multiple" class="2col active">
     </select>
 
     <script>
     $(function () {
-        $('select[multiple].active.7col').multiselect({
+        $('select[multiple].active.2col').multiselect({
             placeholder: 'Select States',
             search: true,
             searchOptions: {
                 'default': 'Search States'
             },
-            columns: 7,
+            columns: 2,
             lazyLoading: true,
             selectAll: true,
-            arrayOptions: example_data
+            arrayOptions: example_data_2
         });
 
     });

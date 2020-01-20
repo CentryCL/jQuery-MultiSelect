@@ -327,18 +327,23 @@
                                 if( instance.optionsToRestore == undefined || instance.optionsToRestore.length === 0){
                                     instance.optionsToRestore = instance.allOptions;
                                 }
-                                instance.loadOptions(instance.optionsToRestore.filter(function(val){
-                                    var cond = false;
-                                    if(instance.options.searchOptions.searchText){
-                                        cond = val.name.toLowerCase().indexOf(searchString) >= 0
+                                var filter_options = [];
+                                for(var c in instance.optionsToRestore){
+                                    for(key in instance.optionsToRestore[c]){
+                                        var option = instance.optionsToRestore[c][key];
+                                        var cond = false;
+                                        if(instance.options.searchOptions.searchText){
+                                            cond = option.name.toLowerCase().indexOf(searchString) >= 0
+                                        }
+                                        if(instance.options.searchOptions.searchValue){
+                                            cond = cond || option.value.toLowerCase().indexOf(searchString) >= 0
+                                        }
+                                        if(cond){
+                                            filter_options.push(option);
+                                        }
                                     }
-                                    if(instance.options.searchOptions.searchValue){
-                                        cond = cond || val.value.toLowerCase().indexOf(searchString) >= 0
-                                    }
-                                    return cond;
-                                }),
-                                true,
-                                false);
+                                }
+                                instance.loadOptions(filter_options, true, false);
                             }else{
                                 optionsList.find('li[data-search-term*="'+ searchString +'"]:not(.optgroup)').removeClass('ms-hidden');
                                 optionsList.find('li:not([data-search-term*="'+ searchString +'"], .optgroup)').addClass('ms-hidden');
@@ -348,7 +353,7 @@
                             if(instance.options.lazyLoading){
                                 instance.allOptions = instance.optionsToRestore;
                                 instance.optionsToRestore = [];
-                                instance.loadOptions(instance.allOptions, true, false);
+                                instance.loadOptions(instance.allOptions.flat(), true, false);
                             }else{
                                 optionsList.find('.ms-hidden').removeClass('ms-hidden');
                             }
@@ -386,20 +391,17 @@
                 var select = optionsWrap.parent().siblings('.ms-list-'+ instance.listNumber +'.jqmsLoaded');
 
                 if( $(this).hasClass('global') ) {
-                    var lazyUnselected = [];
                     if(instance.options.lazyLoading){
-                        lazyUnselected = instance.allOptions.filter(function(val){return !val.checked;});
+                        var lazyUnselected = instance.allOptions.flat().filter(function(val){return !val.checked;});
                         var checked = lazyUnselected.length > 0;
-                        for(var key in instance.allOptions){
-                            instance.allOptions[key].checked = checked;
+                        for(var c in instance.allOptions){
+                            for(var key in instance.allOptions[c]){
+                                if(instance.allOptions[c][key].checked != checked){
+                                    instance._lazySelectOption(instance.allOptions[c][key], checked, select);
+                                }
+                            }
                         }
-                        if(instance.optionsToRestore){
-                            var preloaded_options = instance.allOptions;
-                            instance.loadOptions(instance.optionsToRestore, true, true);
-                            instance.loadOptions(preloaded_options, true, false);
-                        }else{
-                            instance.loadOptions(instance.allOptions, true, true);
-                        }
+                        instance.loadOptions(instance.allOptions.flat(), true, false);
                     }else{
                         // check if any options are not selected if so then select them
                         if( optionsList.find('li:not(.optgroup, .selected, .ms-hidden)').length) {
@@ -428,12 +430,18 @@
                         optgroup.find('li:not(.ms-hidden, .selected) input[type="checkbox"]:not(:disabled)').prop( 'checked', false );
                     }
                 }
-
                 var vals = [];
-                optionsList.find('li.selected input[type="checkbox"]').each(function(){
-                    vals.push( $(this).val() );
-                });
-                select.val( vals ).trigger('change');
+                if(instance.options.lazyLoading){
+                    vals = select.val();
+                    if(vals === null){
+                        vals = [];
+                    }
+                }else{
+                    optionsList.find('li.selected input[type="checkbox"]').each(function(){
+                        vals.push( $(this).val() );
+                    });
+                    select.val( vals ).trigger('change');
+                }
 
                 instance.updateSelectAll   = true;
                 instance.updatePlaceholder = true;
@@ -461,7 +469,7 @@
                     var max_scroll_allowed = optionsList.height()-$(this).height()-scroll_margin_bottom;
                     var currentMaxLoaded = instance.currentMinIndexLoaded + instance.options.lazyMaxLoadingOptions;
                     if($(this).scrollTop() >= max_scroll_allowed && 
-                        instance.allOptions.length > currentMaxLoaded){
+                        instance.allOptions[0].length > currentMaxLoaded){
                         instance._loadBotomOptions($(this));
                     }else if($(this).scrollTop() <= scroll_margin_top &&
                         instance.currentMinIndexLoaded > 0){
@@ -552,73 +560,20 @@
             $(instance.element).hide();
         },
 
-        _updateSelected: function(value, checked, select, checkbox){
-            var instance = this;
-            // toggle clicked option
-            if(instance.options.lazyLoading){
-                var option = instance.allOptions.splice(instance.allOptions.indexOf(instance.allOptionsValueIndex[value]),1)[0];
-                option.checked = checked;
-                if(checked){
-                    var selOption = $('<option value="'+ value +'" selected >'+ value +'</option>');
-                    select.append( selOption );
-                    //put at the beginning
-                    instance.allOptions.unshift(option);
-                }else{
-                    var last_selected_index = 0;
-                    for(var key in instance.allOptions){
-                        if(instance.allOptions[key].checked){
-                            last_selected_index+=1;
-                        }else{
-                            break;
-                        }
-                    }
-                    instance.allOptions.splice(last_selected_index, 0, instance.allOptionsValueIndex[value]);
-                    $(select).find('[value="'+  value  +'"]').remove();
-                }
-            }else{                
-                // toggle clicked option
-                select.find('option[value="'+ instance._escapeSelector( value ) +'"]').prop(
-                    'selected', checked
-                ).closest('select').trigger('change');
-            }
-
-            // USER CALLBACK
-            if( typeof instance.options.onOptionClick == 'function' ) {
-                instance.options.onOptionClick(instance.element, this);
-            }
-
-            instance._updateSelectAllText();
-            instance._updatePlaceholderText();
-        },
-
         loadOptions: function( options, overwrite, updateSelect ){
             var instance = this;
             if(instance.options.lazyLoading){
                 instance.currentMinIndexLoaded = 0;
-                instance.allOptions = options;
+                var column_size = Math.ceil(options.length / instance.options.columns) ;
+                instance.allOptions = [];
+                for(var c=0; c < instance.options.columns; c++){
+                    instance.allOptions.push(options.slice(c*column_size, (c+1)*column_size));       
+                }
                 instance._generateAllOptionsIndex();
                 instance.updateView( instance.allOptions, overwrite, updateSelect );
             }else{
                 instance.updateView( options, overwrite, updateSelect );
             }
-        },
-
-        // Generate index for fast search
-        _generateAllOptionsIndex: function(){
-            var instance = this;
-            instance.allOptionsValueIndex = {};
-            var checked = [];
-            for(var key in instance.allOptions){
-                var current_option = instance.allOptions[key];
-                instance.allOptionsValueIndex[current_option.value] = current_option;
-                if(current_option.checked){
-                    checked.push(current_option);
-                }
-            }
-            for(var key in checked){
-                instance.allOptions.splice(instance.allOptions.indexOf(checked[key]),1);
-            }
-            instance.allOptions = checked.concat(instance.allOptions);
         },
 
         /* LOAD SELECT OPTIONS */
@@ -641,14 +596,15 @@
 
             if(instance.options.lazyLoading){
                 if(updateSelect){
-                    for(var key in options){
-                        if(options[key].checked){
-                            var selOption = $('<option value="'+ options[key].value +'" selected>'+ options[key].name +'</option>');
+                    var flat_options = options.flat();
+                    for(var key in flat_options){
+                        if(flat_options[key].checked){
+                            var selOption = $('<option value="'+ flat_options[key].value +'" selected>'+ flat_options[key].name +'</option>');
                             select.append(selOption);
                         }
                     }
                 }
-                options = options.slice(instance.currentMinIndexLoaded,instance.options.lazyMaxLoadingOptions + instance.currentMinIndexLoaded);
+                options = options.map(function(col){return col.slice(instance.currentMinIndexLoaded, instance.currentMinIndexLoaded+instance.options.lazyMaxLoadingOptions)}).flat();
             }
 
             var containers = [];
@@ -921,7 +877,7 @@
             optionsWrap.find('.ms-selectall').each(function(){
                 var unselected = [];
                 if(instance.options.lazyLoading){
-                    unselected = instance.allOptions.filter(function(v){return !v.checked;});
+                    unselected = instance.allOptions.flat().filter(function(v){return !v.checked;});
                 }else{
                     unselected = $(this).parent().find('li:not(.optgroup,.selected,.ms-hidden)');
                 }
@@ -1000,7 +956,8 @@
             var instance = this;
             var thisOption = $('<label/>', {
                 for : 'ms-opt-'+ msOptCounter,
-                text: option.name
+                text: option.name,
+                title: option.name
             });
 
             var thisCheckbox = $('<input>', {
@@ -1054,7 +1011,8 @@
         // Functions for lazy loading
         _loadBotomOptions: function(element){
             var instance = this;
-            instance._lazyLoadOptions(element, Math.min(instance.allOptions.length - instance.options.lazyMaxLoadingOptions, instance.currentMinIndexLoaded + instance.options.stepOnScrollChange*instance.options.columns));
+            var reference_options = instance.allOptions[0];
+            instance._lazyLoadOptions(element, Math.min(reference_options.length - instance.options.lazyMaxLoadingOptions, instance.currentMinIndexLoaded + instance.options.stepOnScrollChange));
         },
 
         _loadTopOptions: function(element){
@@ -1064,11 +1022,81 @@
 
         _lazyLoadOptions: function(element, new_min){
             var instance = this;
-            var items_moved = (new_min-instance.currentMinIndexLoaded)/instance.options.columns;
-            var scroll_unit_size = $(element.find('ul > li')[0]).height();
+            var items_moved = new_min-instance.currentMinIndexLoaded;
             instance.currentMinIndexLoaded = new_min;
             instance.updateView(instance.allOptions, true, false);
-            element.scrollTop(element.scrollTop()-scroll_unit_size*items_moved);
+            element.scrollTop(instance._scrollSizeForMovement(element, items_moved));
+        },
+
+        _scrollSizeForMovement: function(element, items_moved){
+            var scroll_unit_size = $(element.find('ul > li')[0]).height();
+            return element.scrollTop()-scroll_unit_size*items_moved;
+        },
+        // Generate index for fast search
+        _generateAllOptionsIndex: function(){
+            var instance = this;
+            instance.allOptionsValueIndex = {};
+            for(var c in instance.allOptions){
+                var checked = [];
+                for(key in instance.allOptions[c]){
+                    var current_option = instance.allOptions[c][key];
+                    instance.allOptionsValueIndex[current_option.value] = {option: current_option, column: c};
+                    if(current_option.checked){
+                        checked.push(current_option);
+                    }
+                }
+                for(var key in checked){
+                    instance.allOptions[c].splice(instance.allOptions[c].indexOf(checked[key]),1);
+                }
+                instance.allOptions[c] = checked.concat(instance.allOptions[c]);
+            }
+        },
+
+        _lazySelectOption(option, checked, select){
+            option.checked = checked;
+            if(checked){
+                var selOption = $('<option value="'+ option.value +'" selected >'+ option.value +'</option>');
+                select.append( selOption );
+            }else{
+                $(select).find('[value="'+  option.value  +'"]').remove();
+            }
+        },
+
+        _updateSelected: function(value, checked, select, checkbox){
+            var instance = this;
+            // toggle clicked option
+            if(instance.options.lazyLoading){
+                var index = instance.allOptionsValueIndex[value];
+                var option = instance.allOptions[index.column].splice(instance.allOptions[index.column].indexOf(index.option),1)[0];
+                instance._lazySelectOption(option, checked, select);
+                //Update order to keep selected top
+                if(checked){
+                    instance.allOptions[index.column].unshift(option);
+                }else{
+                    var last_selected_index = 0;
+                    for(var key in instance.allOptions[index.column]){
+                        if(instance.allOptions[index.column][key].checked){
+                            last_selected_index+=1;
+                        }else{
+                            break;
+                        }
+                    }
+                    instance.allOptions[index.column].splice(last_selected_index, 0, index.option);
+                }
+            }else{                
+                // toggle clicked option
+                select.find('option[value="'+ instance._escapeSelector( value ) +'"]').prop(
+                    'selected', checked
+                ).closest('select').trigger('change');
+            }
+
+            // USER CALLBACK
+            if( typeof instance.options.onOptionClick == 'function' ) {
+                instance.options.onOptionClick(instance.element, this);
+            }
+
+            instance._updateSelectAllText();
+            instance._updatePlaceholderText();
         }
     };
 
