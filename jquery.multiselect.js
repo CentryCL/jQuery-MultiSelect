@@ -27,6 +27,17 @@
  *             custom2: 'value2'
  *         }
  *     }]);
+ *    Use lazyLoading for a big number of options  
+ *    lazyLoading DO NOT support option groups
+ *    $('select[multiple]').multiselect({
+ *          lazyLoading: true,
+ *          arrayOptions: [
+ *              {name: 'option name 1', value: 'value1'},
+ *              {name: 'option name 2', value: 'value2'}
+ *              ...
+ *              {name: 'option name 10000', value: 'value10000'}
+ *          ]
+ *    });
  *
  **/
 (function($){
@@ -143,12 +154,18 @@
         /* LOAD CUSTOM MULTISELECT DOM/ACTIONS */
         load: function() {
             var instance = this;
-
             // make sure this is a select list and not loaded
             if( (instance.element.nodeName != 'SELECT') || $(instance.element).hasClass('jqmsLoaded') ) {
                 return true;
             }
-
+            //do not support lazyloading with groups
+            if(instance.options.lazyLoading && 
+                ((instance.options.arrayOptions.length && 
+                    instance.options.arrayOptions.filter(function(val){return val.hasOwnProperty('options') && !val.hasOwnProperty('value');}).length) || 
+                 (!instance.options.arrayOptions.length && instance.element.find('optgroup').length))){
+                console.log('Multiselect: lazyloading not allow optionsgroup');
+                return true;
+            }
             // sanity check so we don't double load on a select element
             $(instance.element).addClass('jqmsLoaded ms-list-'+ instance.listNumber ).data( 'plugin_multiselect-instance', instance );
 
