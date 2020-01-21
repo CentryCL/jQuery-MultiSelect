@@ -162,7 +162,7 @@
             if(instance.options.lazyLoading && 
                 ((instance.options.arrayOptions.length && 
                     instance.options.arrayOptions.filter(function(val){return val.hasOwnProperty('options') && !val.hasOwnProperty('value');}).length) || 
-                 (!instance.options.arrayOptions.length && instance.element.find('optgroup').length))){
+                 (!instance.options.arrayOptions.length && $(instance.element).find('optgroup').length))){
                 console.log('Multiselect: lazyloading not allow optionsgroup');
                 return true;
             }
