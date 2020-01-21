@@ -82,6 +82,9 @@ $('select[multiple]').multiselect( 'loadOptions', [{
 | onSelectAll         | function |                | fires when (un)select all is clicked |
 | onPlaceholder       | function |                | fires when the placeholder txt is updated |
 | optionAttributes    | array    |                | array of attribute keys to copy to the checkbox input |
+| lazyLoading         | boolean  | false          | allow manage big number of options loading part of data when needed |
+| lazyMaxLoadingOptions | number | 20             | max number of row displayed when lazyLoading is active |
+| stepOnScrollChange  | number   | 5              | rows added when scroll is near to limit. |
 
 
 ### Methods
@@ -206,3 +209,9 @@ selectedOpts: selected options
 `searchOptions.onSearch( element )`
 
 element: select list element object
+
+### LazyLoading
+
+Allow manage big number of options in javascript, showing a part of data into html when needed. This option do not support optiongroup yet.
+
+Display a part of the data. When scroll is near of limit, it load a next step of data.
