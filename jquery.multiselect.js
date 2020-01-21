@@ -761,7 +761,7 @@
             });
 
             // COLUMNIZE
-            if( select.find('optgroup').length ) {
+            if( optionsList.find('li.optgroup').length ) {
                 // float non grouped options
                 optionsList.find('> li:not(.optgroup)').css({
                     'float': 'left',

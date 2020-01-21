@@ -6,7 +6,6 @@
     <script src="https://code.jquery.com/jquery-1.12.4.js"></script>
     <script src="https://code.jquery.com/ui/1.12.1/jquery-ui.js"></script>
     <script src="./jquery.multiselect.js"></script>
-    <script type="text/javascript" src="example_data.js"></script>
 </head>
 <body>
     <select name="basic[]" multiple="multiple" class="7col active">
@@ -14,6 +13,10 @@
 
     <script>
     $(function () {
+        var options = [];
+        for(var i=0; i<10000; i++){
+            options.push({value: i+"", name: i+""});
+        }
         $('select[multiple].active.7col').multiselect({
             placeholder: 'Select States',
             search: true,
@@ -23,7 +26,7 @@
             columns: 7,
             lazyLoading: true,
             selectAll: true,
-            arrayOptions: example_data
+            arrayOptions: options
         });
 
     });
